@@ -3,7 +3,7 @@
 '''
 OPS445 Assignment 2
 Program: assignment2.py 
-Author: "Student Name"
+Author: "Hossein"
 Semester: "Enter Winter/Summer/Fall Year"
 
 The python code in this file is original work written by
@@ -19,6 +19,7 @@ Description: <Enter your documentation here>
 '''
 
 import argparse
+import subprocess
 import os, sys
 
 def parse_command_args() -> object:
@@ -36,56 +37,94 @@ def parse_command_args() -> object:
 
 def percent_to_graph(percent: float, length: int=20) -> str:
     "turns a percent 0.0 - 1.0 into a bar graph"
-    ...
-# percent to graph function
+    filled = int(percent * length)  
+    empty = length - filled       
+    return '#' * filled + ' ' * empty
 
 def get_sys_mem() -> int:
     "return total system memory (used or available) in kB"
-    ...
-
+    with open("/proc/meminfo", "r") as f:
+        for line in f:
+            if line.startswith("MemTotal"):
+                return int(line.split()[1])
+            
 def get_avail_mem() -> int:
     "return total memory that is available"
-    ...
-
-def pids_of_prog(app_name: str) -> list:
+    with open("/proc/meminfo", "r") as f:
+        for line in f:
+            if line.startswith("MemAvailable"):
+                 return int(line.split()[1])
+            
+def pids_of_prog(mimo: str) -> list:
     "given an app name, return all pids associated with app"
-    ...
-
+    try:
+        result = subprocess.check_output(
+            ["ps", "aux"], text=True
+        )
+        pids = []
+        for line in result.splitlines():
+            if mimo in line and not line.startswith("USER"):
+                pid = int(line.split()[1])
+                pids.append(pid)
+        
+        return pids
+    
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing ps command: {e}")
+        return []
+    
 def rss_mem_of_pid(proc_id: str) -> int:
     "given a process id, return the resident memory used, zero if not found"
-    ...
-
+    try:
+        with open(f"/proc/{proc_id}/status", "r") as f:
+            for line in f:
+                if line.startswith("VmRSS"):
+                    return int(line.split()[1])
+        return 0  
+    except FileNotFoundError:
+        return 0  
+    
 def bytes_to_human_r(kibibytes: int, decimal_places: int=2) -> str:
     "turn 1,024 into 1 MiB, for example"
-    suffixes = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB']  # iB indicates 1024
+    suffixes = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB'] 
     suf_count = 0
-    result = kibibytes 
-    while result > 1024 and suf_count < len(suffixes):
+    result = kibibytes
+    while result > 1024 and suf_count < len(suffixes) - 1: 
         result /= 1024
         suf_count += 1
-    str_result = f'{result:.{decimal_places}f} '
-    str_result += suffixes[suf_count]
-    return str_result
+    return f'{result:.{decimal_places}f} {suffixes[suf_count]}'
+
+
+def main():
+    args = parse_command_args()
+
+    if not args.program:
+        total_mem = get_sys_mem() 
+        available_mem = get_avail_mem()  
+        used_mem = total_mem - available_mem  
+        percent_used = used_mem / total_mem
+        graph = percent_to_graph(percent_used)
+
+        print(f"Total Memory: {bytes_to_human_r(total_mem)}")
+        print(f"Used Memory: {bytes_to_human_r(used_mem)}")
+        print(f"Available Memory: {bytes_to_human_r(available_mem)}")
+        print(f"Memory Usage: {graph} ({percent_used * 100:.2f}%)")
+
+    else:
+        pids = pids_of_prog(args.program)  
+        total_mem_used = 0
+
+        for pid in pids:
+            rss_mem = rss_mem_of_pid(pid)
+            total_mem_used += rss_mem
+
+        total_mem = get_sys_mem()  
+        percent_used = total_mem_used / total_mem
+        graph = percent_to_graph(percent_used)
+
+        print(f"Total Memory: {bytes_to_human_r(total_mem)}")
+        print(f"Used Memory by {args.program}: {bytes_to_human_r(total_mem_used)}")
+        print(f"Memory Usage: {graph} ({percent_used * 100:.2f}%)")
 
 if __name__ == "__main__":
-    args = parse_command_args()
-    if not args.program:
-        ...
-    else:
-        ...
-    # process args
-    # if no parameter passed, 
-    # open meminfo.
-    # get used memory
-    # get total memory
-    # call percent to graph
-    # print
-
-    # if a parameter passed:
-    # get pids from pidof
-    # lookup each process id in /proc
-    # read memory used
-    # add to total used
-    # percent to graph
-    # take total our of total system memory? or total used memory? total used memory.
-    # percent to graph.
+    main()
